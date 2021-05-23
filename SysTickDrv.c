@@ -2,38 +2,13 @@
 
 #include "SysTickDrv.h"
 
-#define HREG32(x)         (*((volatile unsigned int *)(x)))
-
-#define SYSTICK_MAXCTS 0x00FFFFFF
-
-/* Registers Map*/
-#define STCTRL    HREG32(0xE000E000 + 0x010)
-#define STRELOAD  HREG32(0xE000E000 + 0x014)
-#define STCURRENT HREG32(0xE000E000 + 0x018)
 
 
-
-/* CLK_SRC */
-#define CLK_FIELD_BIT_OFFSET 2
-#define REGVAL_SYSCLOCK      0
-#define REGVAL_PIOSC         1
-
-/* INTERRUPTS ENABLE */
-#define INTEN_FIELD_BIT_OFFSET 1
-#define ENABLE_INT             1
-
-/* START TIMER */
-#define ENABLE_OFFSET  0
-#define ENABLE_SYSTICK 1
-
-
-typedef sSystickReg tSystickReg;
-
-/*
+/* Systick: Reloads the timer
  *
- * Reloads the timer
+ *
  */
-void Drv_Reload_Systick(unsigned int u32_reload)
+void Drv_Reload_Systick(uint32_t u32_reload)
 {
     if(u32_reload > SYSTICK_MAXCTS) {
 
@@ -41,13 +16,12 @@ void Drv_Reload_Systick(unsigned int u32_reload)
     }
     STRELOAD |= u32_reload;
 }
-
 /*
  *
  * Here we read the systick values
  *
  */
-void Drv_GetSys_TickValue(unsigned int * SysValue)
+void Drv_GetSys_TickValue(uint32_t * SysValue)
 {
     if( SysValue != NULL ) {
     *SysValue = SYSTICK_MAXCTS & STCURRENT;
@@ -61,7 +35,7 @@ void Drv_GetSys_TickValue(unsigned int * SysValue)
  */
 void Drv_ClearSystickCurrVal(void)
 {
-    STCURRENT |= 0x00FFFFFE; //Arbitrary number clears register
+    STCURRENT |= (SYSTICK_MAXCTS - 10); //Arbitrary number clears register
 }
 
 /*
@@ -69,41 +43,45 @@ void Drv_ClearSystickCurrVal(void)
  * SysTick Control and Status (STCTRL): A control and status counter to configure its clock,
  * enable the counter, enable the SysTick interrupt, and determine counter status.
  *
+ * The SysTick counter reload and current value are undefined at reset; the correct initialization
+ * sequence for the SysTick counter is:
+ * 1. Program the value in the STRELOAD register.
+ * 2. Clear the STCURRENT register by writing to it with any value.
+ * 3. Configure the STCTRL register for the required operation.
  */
-
-/*
-The SysTick counter reload and current value are undefined at reset; the correct initialization
-sequence for the SysTick counter is:
-1. Program the value in the STRELOAD register.
-2. Clear the STCURRENT register by writing to it with any value.
-3. Configure the STCTRL register for the required operation.*/
 
 void Drv_CtrlSysTick(tSystickReg * SystickCfg )
 {
 
+    /* 1. Program the value in the STRELOAD register. */
+    Drv_Reload_Systick(SystickCfg->SysTick_CountLimit);
+
+    /* 2. Clear the STCURRENT register by writing to it with any value. */
+    Drv_ClearSystickCurrVal();
     /*
      * CLK_SRC
      * Value Description
      *
-     * 0 Precision internal oscillator (PIOSC) divided by 4
-     * 1 System clock
+     * 0 = Precision internal oscillator (PIOSC) divided by 4
+     * 1 = System clock
      */
-    if( REGVAL_PIOSC == (SystickCfg->u8clock_src & REGVAL_PIOSC)){
-        STCTRL |= (REGVAL_PIOSC << CLK_FIELD_BIT_OFFSET);
+
+    if( REGVAL_SYSCLOCK == (SystickCfg->u8clock_src & REGVAL_SYSCLOCK)){
+        STCTRL |= (REGVAL_SYSCLOCK << CLK_FIELD_BIT_OFFSET);
     }
     else
     {
-       STCTRL &=  ~((uint32_t)(REGVAL_PIOSC << CLK_FIELD_BIT_OFFSET));
+       STCTRL &=  ~((uint32_t)(REGVAL_SYSCLOCK << CLK_FIELD_BIT_OFFSET));
     }
 
     /*Interrupts enabled by systick*/
-    if( SystickCfg->interruptEn == 1 )
+    if( SystickCfg->interruptEn == ENABLE_INT )
     {
         STCTRL |= ((uint32_t)(ENABLE_INT<< INTEN_FIELD_BIT_OFFSET));
 
     }else{
-
-        STCTRL &= ~((uint32_t) (ENABLE_INT << INTEN_FIELD_BIT_OFFSE0T));
+     
+        STCTRL &= ~((uint32_t) (ENABLE_INT << INTEN_FIELD_BIT_OFFSET));
     }
 
     /* Start Systick timer*/
@@ -115,7 +93,6 @@ void Drv_CtrlSysTick(tSystickReg * SystickCfg )
         STCTRL &= ~((uint32_t)ENABLE_SYSTICK);
     }
 }
-
 /* Start Systick*/
 void Drv_StartSysTick(uint8_t  StartSystick ){
 
@@ -127,6 +104,15 @@ void Drv_StartSysTick(uint8_t  StartSystick ){
     else{
         STCTRL &= ~((uint32_t)ENABLE_SYSTICK);
     }
-
 }
 
+void Drv_SysTick_IsTimerElapsed(uint8_t * TimerPassed){
+
+    if( (STCTRL & SYSTICK_COUNT) == SYSTICK_COUNT){
+    *TimerPassed = TIMER_ELAPSED;
+    }
+    else{
+    *TimerPassed = 0;
+    }
+
+}

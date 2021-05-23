@@ -1,25 +1,5 @@
 //*****************************************************************************
 //
-// blinky.c - Simple example to blink the on-board LED.
-//
-// Copyright (c) 2012-2017 Texas Instruments Incorporated.  All rights reserved.
-// Software License Agreement
-//
-// Texas Instruments (TI) is supplying this software for use solely and
-// exclusively on TI's microcontroller products. The software is owned by
-// TI and/or its suppliers, and is protected under applicable copyright
-// laws. You may not combine this software with "viral" open-source
-// software in order to form a larger program.
-//
-// THIS SOFTWARE IS PROVIDED "AS IS" AND WITH ALL FAULTS.
-// NO WARRANTIES, WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING, BUT
-// NOT LIMITED TO, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE. TI SHALL NOT, UNDER ANY
-// CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL, OR CONSEQUENTIAL
-// DAMAGES, FOR ANY REASON WHATSOEVER.
-//
-// This is part of revision 2.1.4.178 of the EK-TM4C123GXL Firmware Package.
-//
 //*****************************************************************************
 
 #include <stdint.h>
@@ -66,13 +46,17 @@
 #define OFFSET_BB            2
 
 
-#define RGB_PINS (RGB_LED_BLUE | RGB_LED_GREEN)
+#define RGB_PINS (RGB_LED_BLUE)
 
 //*****************************************************************************
 //
 // The error routine that is called if the driver library encounters an error.
 //
 //*****************************************************************************
+
+
+void InitSysTickTimer(void);
+
 #ifdef DEBUG
 void
 __error__(char *pcFilename, uint32_t ui32Line)
@@ -93,6 +77,8 @@ void delay_ms(unsigned int dela_ms)
 int main(void)
 {
 
+
+    //InitSysTickTimer();
     //init modules
     //Enable PORTF Clocking
     RCGCGPIO |= GPIO_PORTF;
@@ -102,17 +88,49 @@ int main(void)
     GPIODR_PORTF &= ~(RGB_PINS);
     GPIODEN_PORTF |= (RGB_PINS);
 
+    InitSysTickTimer();
+
+    volatile uint8_t timer_elapsed = 0;
+    volatile uint8_t RGB_StateMachine = 1;
     while(1)
     {
+       Drv_SysTick_IsTimerElapsed(&timer_elapsed);
+       if( 1 == timer_elapsed){
+           timer_elapsed = 0;
+           if(RGB_StateMachine){
+               GPIODATA_PORTF |= (RGB_PINS);
+               RGB_StateMachine = 0;
+           }
+           else{
+               RGB_StateMachine = 1;
+               GPIODATA_PORTF &= ~(RGB_PINS);
+           }
+
+       }
+       /*
        GPIODATA_PORTF |= (RGB_PINS);
        delay_ms(500);
        GPIODATA_PORTF &= ~(RGB_PINS);
-       delay_ms(500);
+       delay_ms(500);*/
+
     }
     // Pin PF4 SW1
     // Pin PF0 SW2
     // Pin PF1 RGB LED Red
     // Pin PF2 RGB LED Blue
     // Pin PF3 RGB LED Green
-    return 0;
+
+}
+
+
+void InitSysTickTimer(void){
+
+   tSystickReg SysTickParam = {0};
+
+    SysTickParam.u8clock_src = 1;
+    SysTickParam.interruptEn = 0; //No Interrupt
+    SysTickParam.start_counter = ENABLE_SYSTICK;
+    SysTickParam.SysTick_CountLimit = (16000000)>>4;
+    
+    Drv_CtrlSysTick(&SysTickParam);
 }
